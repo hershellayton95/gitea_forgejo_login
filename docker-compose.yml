@@ -4,6 +4,10 @@ volumes:
     driver: local
   gitea_postgres:
     driver: local
+  forgejo:
+    driver: local
+  forgejo_postgres:
+    driver: local
   keycloak_postgres:
     driver: local
   openldap_data:
@@ -39,6 +43,24 @@ services:
       timeout: 5s
       retries: 10
 
+  forgejo_postgres:
+    image: postgres
+    restart: unless-stopped
+    container_name: forgejo_postgres
+    networks:
+      gitea_network:
+        ipv4_address: 172.20.0.11
+    environment:
+      - POSTGRES_USER=${FORGEJO_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${FORGEJO_POSTGRES_PASSWORD}
+      - POSTGRES_DB=${FORGEJO_POSTGRES_DB}
+    volumes:
+    - forgejo_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${FORGEJO_POSTGRES_USER} -d ${FORGEJO_POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   keycloak_postgres:
     image: postgres
@@ -46,7 +68,7 @@ services:
     container_name: keycloak_postgres
     networks:
       gitea_network:
-        ipv4_address: 172.20.0.11
+        ipv4_address: 172.20.0.12
     environment:
       - POSTGRES_USER=${KEYCLOAK_POSTGRES_USER}
       - POSTGRES_PASSWORD=${KEYCLOAK_POSTGRES_PASSWORD}
@@ -58,7 +80,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
   gitea:
     image: docker.gitea.com/gitea:1.24.6
     container_name: gitea
@@ -93,11 +114,45 @@ services:
       retries: 3
       start_period: 40s
 
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:12.0.4
+    container_name: forgejo
+    restart: always
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - FORGEJO__database__DB_TYPE=${FORGEJO_DB_TYPE}
+      - FORGEJO__database__HOST=${FORGEJO_DB_HOST}
+      - FORGEJO__database__NAME=${FORGEJO_POSTGRES_DB}
+      - FORGEJO__database__USER=${FORGEJO_POSTGRES_USER}
+      - FORGEJO__database__PASSWD=${FORGEJO_POSTGRES_PASSWORD}
+      - FORGEJO__database__SCHEMA=${FORGEJO_POSTGRES_SCHEMA}
+    networks:
+      gitea_network:
+        ipv4_address: 172.20.0.21
+    volumes:
+      - forgejo:/data
+      - ./forgejo:/data/gitea/conf
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3001:3000"
+      - "223:22"
+    depends_on:
+      forgejo_postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/users/sign_in"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   keycloak:
     image: quay.io/keycloak/keycloak:latest
     command: start
     environment:
-      KC_HOSTNAME: 172.20.0.21
+      KC_HOSTNAME: 172.20.0.22
       KC_HOSTNAME_PORT: 8080
       KC_HOSTNAME_STRICT_BACKCHANNEL: false
       KC_HTTP_ENABLED: true
@@ -117,7 +172,7 @@ services:
         condition: service_healthy
     networks:
       gitea_network:
-        ipv4_address: 172.20.0.21
+        ipv4_address: 172.20.0.22
 
   openldap:
     image: osixia/openldap:1.5.0

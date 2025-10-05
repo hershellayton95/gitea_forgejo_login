@@ -4,12 +4,20 @@ source .env
 
 # Deriva il DN dal dominio
 BASE_DN=$(echo $LDAP_DOMAIN | sed 's/\./,dc=/g' | sed 's/^/dc=/')
-ADMIN_DN="cn=admin,${BASE_DN}"
 
 # --- Funzione per eseguire comandi LDAP ---
 run_ldap_command() {
-  docker compose exec -e BASE_DN=${BASE_DN} -T openldap ldapadd -x -w "${LDAP_ADMIN_PASSWORD}" -D "${ADMIN_DN}"
+  docker compose exec -e BASE_DN=${BASE_DN} -T openldap ldapadd -Y EXTERNAL -H ldapi:///
 }
+
+echo ">>> Creazione dell'Overlay MemberOf..."
+run_ldap_command << EOF
+dn: olcOverlay=memberof,olcDatabase={1}mdb,cn=config
+objectClass: olcOverlayConfig
+objectClass: olcMemberOf
+olcOverlay: memberof
+olcMemberOfRefint: TRUE
+EOF
 
 echo ">>> Creazione delle Unità Organizzative (OU)..."
 run_ldap_command << EOF

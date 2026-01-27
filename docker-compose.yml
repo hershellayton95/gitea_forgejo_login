@@ -12,6 +12,8 @@ volumes:
   #   driver: local
   authentik_postgres:
     driver: local
+  authentik_redis:
+    driver: local
   # openldap_data:
   #   driver: local
   # openldap_config:
@@ -39,8 +41,6 @@ services:
       - POSTGRES_DB=${GITEA_POSTGRES_DB}
     volumes:
       - gitea_postgres:/var/lib/postgresql/data
-    env_file:
-    - .env
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -h localhost -U ${GITEA_POSTGRES_USER} -d ${GITEA_POSTGRES_DB}']
       interval: 5s
@@ -60,8 +60,6 @@ services:
   #     - POSTGRES_DB=${FORGEJO_POSTGRES_DB}
   #   volumes:
   #   - forgejo_postgres:/var/lib/postgresql/data
-  #   env_file:
-  #   - .env
   #   healthcheck:
   #     test: ['CMD-SHELL', 'pg_isready -h localhost -U ${FORGEJO_POSTGRES_USER} -d ${FORGEJO_POSTGRES_DB}']
   #     interval: 5s
@@ -81,8 +79,6 @@ services:
   #     - POSTGRES_DB=${KEYCLOAK_POSTGRES_DB}
   #   volumes:
   #   - keycloak_postgres:/var/lib/postgresql/data
-  #   env_file:
-  #   - .env
   #   healthcheck:
   #     test: ['CMD-SHELL', 'pg_isready -h localhost -U ${KEYCLOAK_POSTGRES_USER} -d ${KEYCLOAK_POSTGRES_DB}']
   #     interval: 5s
@@ -102,8 +98,6 @@ services:
       - POSTGRES_DB=${AUTHENTIK_POSTGRES_DB}
     volumes:
     - authentik_postgres:/var/lib/postgresql/data
-    env_file:
-    - .env
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -h localhost -U ${AUTHENTIK_POSTGRES_USER} -d ${AUTHENTIK_POSTGRES_DB}']
       interval: 5s
@@ -137,8 +131,6 @@ services:
     depends_on:
       gitea_postgres:
         condition: service_healthy
-    env_file:
-    - .env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/users/sign_in"]
       interval: 1m30s
@@ -173,8 +165,6 @@ services:
   #   depends_on:
   #     forgejo_postgres:
   #       condition: service_healthy
-  #   env_file:
-  #   - .env
   #   healthcheck:
   #     test: ["CMD", "curl", "-f", "http://localhost:3000/users/sign_in"]
   #     interval: 1m30s
@@ -204,23 +194,21 @@ services:
   #   depends_on:
   #     gitea_postgres:
   #       condition: service_healthy
-  #   env_file:
-  #   - .env
   #   networks:
   #     gitea_network:
   #       ipv4_address: 172.20.0.22
 
   authentik_server:
+    container_name: authentik_server
     command: server
     depends_on:
       authentik_postgres:
         condition: service_healthy
-    env_file:
-    - .env
     environment:
-      - AUTHENTIK_POSTGRESQL__HOST=authentik_postgresql
+      - AUTHENTIK_POSTGRESQL__HOST=authentik_postgres
       - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_POSTGRES_DB:-authentik}
       - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
+      - POSTGRESQL_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
       - AUTHENTIK_POSTGRESQL__USER=${AUTHENTIK_POSTGRES_USER:-authentik}
       - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:?secret key required}
     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
@@ -231,18 +219,21 @@ services:
     volumes:
     - ./data:/data
     - ./custom-templates:/templates
+    networks:
+      gitea_network:
+        ipv4_address: 172.20.0.23
 
   authentik_worker:
+    container_name: authentik_worker
     command: worker
     depends_on:
       authentik_postgres:
         condition: service_healthy
-    env_file:
-    - .env
     environment:
-      - AUTHENTIK_POSTGRESQL__HOST=authentik_postgresql
+      - AUTHENTIK_POSTGRESQL__HOST=authentik_postgres
       - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_POSTGRES_DB:-authentik}
       - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
+      - POSTGRESQL_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
       - AUTHENTIK_POSTGRESQL__USER=${AUTHENTIK_POSTGRES_USER:-authentik}
       - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:?secret key required}
     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
@@ -253,6 +244,9 @@ services:
     - ./data:/data
     - ./certs:/certs
     - ./custom-templates:/templates
+    networks:
+      gitea_network:
+        ipv4_address: 172.20.0.24
 
   # openldap:
   #   image: osixia/openldap:1.5.0
@@ -306,3 +300,65 @@ services:
   #   command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
   #   extra_hosts:
   #     - "host.docker.internal:host-gateway"
+
+
+# services:
+#   postgresql:
+#     environment:
+#       POSTGRES_DB: ${PG_DB:-authentik}
+#       POSTGRES_PASSWORD: ${PG_PASS:?database password required}
+#       POSTGRES_USER: ${PG_USER:-authentik}
+#     healthcheck:
+#       interval: 30s
+#       retries: 5
+#       start_period: 20s
+#       test:
+#       - CMD-SHELL
+#       - pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}
+#       timeout: 5s
+#     image: docker.io/library/postgres:16-alpine
+#     restart: unless-stopped
+#     volumes:
+#     - database:/var/lib/postgresql/data
+#   server:
+#     command: server
+#     depends_on:
+#       postgresql:
+#         condition: service_healthy
+#     environment:
+#       AUTHENTIK_POSTGRESQL__HOST: postgresql
+#       AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+#       AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+#       AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+#       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+#     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
+#     ports:
+#     - ${COMPOSE_PORT_HTTP:-9000}:9000
+#     - ${COMPOSE_PORT_HTTPS:-9443}:9443
+#     restart: unless-stopped
+#     volumes:
+#     - ./data:/data
+#     - ./custom-templates:/templates
+
+#   worker:
+#     command: worker
+#     depends_on:
+#       postgresql:
+#         condition: service_healthy
+#     environment:
+#       AUTHENTIK_POSTGRESQL__HOST: postgresql
+#       AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+#       AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+#       AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+#       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+#     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
+#     restart: unless-stopped
+#     user: root
+#     volumes:
+#     - /var/run/docker.sock:/var/run/docker.sock
+#     - ./data:/data
+#     - ./certs:/certs
+#     - ./custom-templates:/templates
+# volumes:
+#   database:
+#     driver: local

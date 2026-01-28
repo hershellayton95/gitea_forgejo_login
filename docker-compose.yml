@@ -12,8 +12,6 @@ volumes:
   #   driver: local
   authentik_postgres:
     driver: local
-  authentik_redis:
-    driver: local
   # openldap_data:
   #   driver: local
   # openldap_config:

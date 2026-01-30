@@ -10,7 +10,9 @@ volumes:
   #   driver: local
   # keycloak_postgres:
   #   driver: local
-  authentik_postgres:
+  # authentik_postgres:
+  #   driver: local
+  zitadel_postgres:
     driver: local
   # openldap_data:
   #   driver: local
@@ -34,7 +36,7 @@ services:
       gitea_network:
         ipv4_address: 172.20.0.10
     environment:
-      - POSTGRES_USER=${GITEA_POSTGRES_USER}
+      - PGUSER=${GITEA_POSTGRES_USER}
       - POSTGRES_PASSWORD=${GITEA_POSTGRES_PASSWORD}
       - POSTGRES_DB=${GITEA_POSTGRES_DB}
     volumes:
@@ -53,7 +55,7 @@ services:
   #     gitea_network:
   #       ipv4_address: 172.20.0.11
   #   environment:
-  #     - POSTGRES_USER=${FORGEJO_POSTGRES_USER}
+  #     - PGUSER=${FORGEJO_POSTGRES_USER}
   #     - POSTGRES_PASSWORD=${FORGEJO_POSTGRES_PASSWORD}
   #     - POSTGRES_DB=${FORGEJO_POSTGRES_DB}
   #   volumes:
@@ -72,7 +74,7 @@ services:
   #     gitea_network:
   #       ipv4_address: 172.20.0.12
   #   environment:
-  #     - POSTGRES_USER=${KEYCLOAK_POSTGRES_USER}
+  #     - PGUSER=${KEYCLOAK_POSTGRES_USER}
   #     - POSTGRES_PASSWORD=${KEYCLOAK_POSTGRES_PASSWORD}
   #     - POSTGRES_DB=${KEYCLOAK_POSTGRES_DB}
   #   volumes:
@@ -83,21 +85,40 @@ services:
   #     timeout: 5s
   #     retries: 10
 
-  authentik_postgres:
-    image: postgres:16
+  # authentik_postgres:
+  #   image: postgres:17
+  #   restart: unless-stopped
+  #   container_name: authentik_postgres
+  #   networks:
+  #     gitea_network:
+  #       ipv4_address: 172.20.0.13
+  #   environment:
+  #     - PGUSER=${AUTHENTIK_POSTGRES_USER}
+  #     - POSTGRES_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
+  #     - POSTGRES_DB=${AUTHENTIK_POSTGRES_DB}
+  #   volumes:
+  #   - authentik_postgres:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ['CMD-SHELL', 'pg_isready -h localhost -U ${AUTHENTIK_POSTGRES_USER} -d ${AUTHENTIK_POSTGRES_DB}']
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+
+  zitadel_postgres:
+    image: postgres:17
     restart: unless-stopped
-    container_name: authentik_postgres
+    container_name: zitadel_postgres
     networks:
       gitea_network:
-        ipv4_address: 172.20.0.13
+        ipv4_address: 172.20.0.14
     environment:
-      - POSTGRES_USER=${AUTHENTIK_POSTGRES_USER}
-      - POSTGRES_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
-      - POSTGRES_DB=${AUTHENTIK_POSTGRES_DB}
+      - PGUSER=${ZITADEL_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${ZITADEL_POSTGRES_PASSWORD}
+      - POSTGRES_DB=${ZITADEL_POSTGRES_DB}
     volumes:
-    - authentik_postgres:/var/lib/postgresql/data
+    - zitadel_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${AUTHENTIK_POSTGRES_USER} -d ${AUTHENTIK_POSTGRES_DB}']
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${ZITADEL_POSTGRES_USER} -d ${ZITADEL_POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -124,7 +145,7 @@ services:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
     ports:
-      - "3000:3000"
+      - "3001:3000"
       - "222:22"
     depends_on:
       gitea_postgres:
@@ -196,55 +217,126 @@ services:
   #     gitea_network:
   #       ipv4_address: 172.20.0.22
 
-  authentik_server:
-    container_name: authentik_server
-    command: server
-    depends_on:
-      authentik_postgres:
-        condition: service_healthy
-    environment:
-      - AUTHENTIK_POSTGRESQL__HOST=authentik_postgres
-      - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_POSTGRES_DB:-authentik}
-      - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
-      - POSTGRESQL_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
-      - AUTHENTIK_POSTGRESQL__USER=${AUTHENTIK_POSTGRES_USER:-authentik}
-      - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:?secret key required}
-    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
-    ports:
-    - ${COMPOSE_PORT_HTTP:-9000}:9000
-    - ${COMPOSE_PORT_HTTPS:-9443}:9443
-    restart: unless-stopped
-    volumes:
-    - ./data:/data
-    - ./custom-templates:/templates
-    networks:
-      gitea_network:
-        ipv4_address: 172.20.0.23
+  # authentik_server:
+  #   container_name: authentik_server
+  #   command: server
+  #   depends_on:
+  #     authentik_postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     - AUTHENTIK_POSTGRESQL__HOST=authentik_postgres
+  #     - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_POSTGRES_DB:-authentik}
+  #     - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
+  #     - POSTGRESQL_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
+  #     - AUTHENTIK_POSTGRESQL__USER=${AUTHENTIK_POSTGRES_USER:-authentik}
+  #     - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:?secret key required}
+  #   image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
+  #   ports:
+  #   - ${COMPOSE_PORT_HTTP:-9000}:9000
+  #   - ${COMPOSE_PORT_HTTPS:-9443}:9443
+  #   restart: unless-stopped
+  #   volumes:
+  #   - ./data:/data
+  #   - ./custom-templates:/templates
+  #   networks:
+  #     gitea_network:
+  #       ipv4_address: 172.20.0.23
 
-  authentik_worker:
-    container_name: authentik_worker
-    command: worker
-    depends_on:
-      authentik_postgres:
-        condition: service_healthy
-    environment:
-      - AUTHENTIK_POSTGRESQL__HOST=authentik_postgres
-      - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_POSTGRES_DB:-authentik}
-      - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
-      - POSTGRESQL_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
-      - AUTHENTIK_POSTGRESQL__USER=${AUTHENTIK_POSTGRES_USER:-authentik}
-      - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:?secret key required}
-    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
+  # authentik_worker:
+  #   container_name: authentik_worker
+  #   command: worker
+  #   depends_on:
+  #     authentik_postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     - AUTHENTIK_POSTGRESQL__HOST=authentik_postgres
+  #     - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_POSTGRES_DB:-authentik}
+  #     - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
+  #     - POSTGRESQL_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD}
+  #     - AUTHENTIK_POSTGRESQL__USER=${AUTHENTIK_POSTGRES_USER:-authentik}
+  #     - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:?secret key required}
+  #   image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
+  #   restart: unless-stopped
+  #   user: root
+  #   volumes:
+  #   - /var/run/docker.sock:/var/run/docker.sock
+  #   - ./data:/data
+  #   - ./certs:/certs
+  #   - ./custom-templates:/templates
+  #   networks:
+  #     gitea_network:
+  #       ipv4_address: 172.20.0.24
+
+  zitadel:
     restart: unless-stopped
-    user: root
+    container_name: zitadel
+    image: ghcr.io/zitadel/zitadel:latest
+    command: start-from-init --masterkey "${ZITADEL_MASTER_KEY}"
+    environment:
+      - ZITADEL_EXTERNALDOMAIN=localhost
+      - ZITADEL_EXTERNALSECURE=false
+      - ZITADEL_TLS_ENABLED=false
+      - ZITADEL_DATABASE_POSTGRES_HOST=zitadel_postgres
+      - ZITADEL_DATABASE_POSTGRES_PORT=5432
+      - ZITADEL_DATABASE_POSTGRES_DATABASE=${ZITADEL_POSTGRES_DB}
+      - ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=postgres
+      - ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=${ZITADEL_POSTGRES_PASSWORD}
+      - ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable
+      - ZITADEL_DATABASE_POSTGRES_USER_USERNAME=${ZITADEL_POSTGRES_USER}
+      - ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=${ZITADEL_POSTGRES_PASSWORD}
+      - ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable
+      - ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH=/current-dir/login-client.pat
+      - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED=false
+      - ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME=login-client
+      - ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME=Automatically Initialized IAM_LOGIN_CLIENT
+      - ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE=2029-01-01T00:00:00Z
+      - ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED=true # To use the login v1, set this to false.
+      - ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI=http://localhost:3000/ui/v2/login
+      - ZITADEL_OIDC_DEFAULTLOGINURLV2=http://localhost:3000/ui/v2/login/login?authRequest=
+      - ZITADEL_OIDC_DEFAULTLOGOUTURLV2=http://localhost:3000/ui/v2/login/logout?post_logout_redirect=
+      - ZITADEL_SAML_DEFAULTLOGINURLV2=http://localhost:3000/ui/v2/login/login?samlRequest=
+      - ZITADEL_FIRSTINSTANCE_ORG_NAME=My Organization
+      - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME=${ZITADEL_ADMIN_USERNAME}
+      - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD=${ZITADEL_ADMIN_PASSWORD}
+    healthcheck:
+      test:
+        - CMD
+        - /app/zitadel
+        - ready
+      interval: 10s
+      timeout: 60s
+      retries: 5
+      start_period: 10s
+    user: "0"
     volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - ./data:/data
-    - ./certs:/certs
-    - ./custom-templates:/templates
+      - .:/current-dir:delegated
+    ports:
+      - 8080:8080
+      - 3000:3000
     networks:
       gitea_network:
-        ipv4_address: 172.20.0.24
+        ipv4_address: 172.20.0.25
+    depends_on:
+      zitadel_postgres:
+        condition: service_healthy
+
+  login:
+    restart: unless-stopped
+    container_name: zitadel-login
+    image: ghcr.io/zitadel/zitadel-login:latest
+    # If you can't use the network_mode service:zitadel, you can pass the environment variables ZITADEL_API_URL=http://zitadel:8080 and CUSTOM_REQUEST_HEADERS=Host:localhost instead.
+    environment:
+      - ZITADEL_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_BASE_PATH=/ui/v2/login
+      - ZITADEL_SERVICE_USER_TOKEN_FILE=/current-dir/login-client.pat
+    network_mode: service:zitadel
+    user: "0"
+    volumes:
+      - .:/current-dir:ro
+    depends_on:
+      zitadel:
+        condition: service_healthy
+        restart: false
 
   # openldap:
   #   image: osixia/openldap:1.5.0
@@ -298,65 +390,3 @@ services:
   #   command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
   #   extra_hosts:
   #     - "host.docker.internal:host-gateway"
-
-
-# services:
-#   postgresql:
-#     environment:
-#       POSTGRES_DB: ${PG_DB:-authentik}
-#       POSTGRES_PASSWORD: ${PG_PASS:?database password required}
-#       POSTGRES_USER: ${PG_USER:-authentik}
-#     healthcheck:
-#       interval: 30s
-#       retries: 5
-#       start_period: 20s
-#       test:
-#       - CMD-SHELL
-#       - pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}
-#       timeout: 5s
-#     image: docker.io/library/postgres:16-alpine
-#     restart: unless-stopped
-#     volumes:
-#     - database:/var/lib/postgresql/data
-#   server:
-#     command: server
-#     depends_on:
-#       postgresql:
-#         condition: service_healthy
-#     environment:
-#       AUTHENTIK_POSTGRESQL__HOST: postgresql
-#       AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
-#       AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
-#       AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
-#       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
-#     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
-#     ports:
-#     - ${COMPOSE_PORT_HTTP:-9000}:9000
-#     - ${COMPOSE_PORT_HTTPS:-9443}:9443
-#     restart: unless-stopped
-#     volumes:
-#     - ./data:/data
-#     - ./custom-templates:/templates
-
-#   worker:
-#     command: worker
-#     depends_on:
-#       postgresql:
-#         condition: service_healthy
-#     environment:
-#       AUTHENTIK_POSTGRESQL__HOST: postgresql
-#       AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
-#       AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
-#       AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
-#       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
-#     image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.12.1}
-#     restart: unless-stopped
-#     user: root
-#     volumes:
-#     - /var/run/docker.sock:/var/run/docker.sock
-#     - ./data:/data
-#     - ./certs:/certs
-#     - ./custom-templates:/templates
-# volumes:
-#   database:
-#     driver: local
